@@ -1,0 +1,20 @@
+machine:
+  services:
+    - docker
+
+dependencies:
+  override:
+    - docker info
+    - docker build -t ngage-stats .
+
+test:
+  override:
+    - echo "No testing for initial install"
+
+deployment:
+  hub:
+    branch: master
+    commands:
+      - docker login -e nanongage@gmail.com -u nanongage -p $DOCKER_PW
+      - docker push nanongage/ngage-stats
+      - sh ./deploy.sh
