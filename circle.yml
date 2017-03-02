@@ -5,7 +5,7 @@ machine:
 dependencies:
   override:
     - docker info
-    - docker build -t ngage-stats .
+    - docker build -t nanongage/ngage-stats .
 
 test:
   override:
