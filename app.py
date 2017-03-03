@@ -1,5 +1,6 @@
 from flask import Flask, request
 from flask_api import status
+from flask_cors import CORS, cross_origin
 import psycopg2
 import sys
 import json
@@ -11,6 +12,7 @@ cur = conn.cursor()
 print "\nStarting Stats Server\n"
 
 app = Flask(__name__)
+CORS(app)
 
 @app.route('/')
 def welcome():
@@ -34,16 +36,19 @@ def userSessionStats(id):
   try:
     cur.execute("""SELECT 
                   s."sessionID",
+                  pr."title",
                   count(DISTINCT p."userID") participants, 
                   count(DISTINCT q."questionID") questions,
-                  count(DISTINCT r."responseID") responses 
+                  count(DISTINCT r."responseID") responses,
+                  to_char(s."createdAt", 'DD/MM/YYYY')
                   from "session" s 
                   left outer join "question" q on s."presentationID" = q."presentationID"
                   left outer join "participant" p on s."sessionID" = p."sessionID" 
+                  left outer join "presentation" pr on pr."presentationID" = s."presentationID"
                   left outer join "response" r on s."sessionID" = r."sessionID" 
                   where s."sessionID" IN (SELECT distinct s."sessionID" FROM "session" s INNER JOIN "presentation" p ON s."presentationID" = p."presentationID" WHERE p."userID" = %s)
-                  group by s."sessionID" """,[id])
-    columns = ('sessionID', 'participants', 'questions', 'responses')
+                  group by s."sessionID", pr."title", s."createdAt" ORDER BY s."createdAt" """,[id])
+    columns = ('sessionID', 'title', 'participants', 'questions', 'responses', 'createdAt')
     results = []
     for row in cur.fetchall():
        results.append(dict(zip(columns, row)))
@@ -64,6 +69,7 @@ def groupStats():
       LEFT OUTER JOIN "user" u ON u."userID" = r."userID"
       WHERE r."userID" IN (select "userID" from "groupMember" where "groupID" = %s)
       AND r."sessionID" IN (SELECT s."sessionID" FROM "session" s INNER JOIN "presentation" p ON p."presentationID" = s."presentationID" AND p."userID" = %s)
+      AND r."userID" > 0
       GROUP BY r."userID", u."firstName", u."lastName" """, [presenterID, groupID, presenterID])
     columns = ('userID', 'firstName', 'lastName', 'responses', 'participants')
     results = []
