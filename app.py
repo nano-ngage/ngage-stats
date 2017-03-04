@@ -80,6 +80,33 @@ def groupStats():
     print type(err)
     return 'Server Failure', status.HTTP_400_BAD_REQUEST
 
+@app.route('/presentationStats/<presentationID>')
+def presentationStats(presentationID):
+  try:
+    cur.execute("""
+      SELECT 
+          s."sessionID",
+          pr."title",
+          count(DISTINCT p."userID") participants, 
+          count(DISTINCT q."questionID") questions,
+          count(DISTINCT r."responseID") responses,
+          to_char(s."createdAt", 'DD/MM/YYYY')
+          from "session" s 
+          left outer join "question" q on s."presentationID" = q."presentationID"
+          left outer join "participant" p on s."sessionID" = p."sessionID" 
+          left outer join "presentation" pr on pr."presentationID" = s."presentationID"
+          left outer join "response" r on s."sessionID" = r."sessionID" 
+          where s."presentationID" = %s
+          group by s."sessionID", pr."title", s."createdAt" ORDER BY s."createdAt" """, [presentationID])
+    columns = ('sessionID', 'title', 'participants', 'questions', 'responses', 'createdAt')
+    results = []
+    for row in cur.fetchall():
+       results.append(dict(zip(columns, row)))
+    return str(json.dumps(results, indent=2))
+  except Exception as err:
+    print type(err)
+    return 'Server Failure', status.HTTP_400_BAD_REQUEST
+
 
 # @app.route('/sessionStats/<id>')
 # def sessionStats(id):
