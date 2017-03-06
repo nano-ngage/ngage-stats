@@ -53,8 +53,8 @@ def userSessionStats(id):
     for row in cur.fetchall():
        results.append(dict(zip(columns, row)))
     return str(json.dumps(results, indent=2))
-  except Exception as err:
-    print type(err)
+  except psycopg2.Error as e:
+    print e.pgerror
     return 'Server Failure', status.HTTP_400_BAD_REQUEST
 
 @app.route('/groupStats', methods=['GET'])
@@ -76,8 +76,8 @@ def groupStats():
     for row in cur.fetchall():
        results.append(dict(zip(columns, row)))
     return str(json.dumps(results, indent=2))
-  except Exception as err:
-    print type(err)
+  except psycopg2.Error as e:
+    print e.pgerror
     return 'Server Failure', status.HTTP_400_BAD_REQUEST
 
 @app.route('/presentationStats/<presentationID>')
@@ -103,8 +103,40 @@ def presentationStats(presentationID):
     for row in cur.fetchall():
        results.append(dict(zip(columns, row)))
     return str(json.dumps(results, indent=2))
-  except Exception as err:
-    print type(err)
+  except psycopg2.Error as e:
+    print e.pgerror
+    return 'Server Failure', status.HTTP_400_BAD_REQUEST
+
+@app.route('/participationStats/<userID>')
+def participationStats(userID):
+  try:
+    cur.execute("""
+        WITH sesh AS (SELECT s."sessionID", pa."userID", (count(DISTINCT r."responseID") * 1.0 / count(DISTINCT q."questionID")) as "percent" FROM "session" s 
+        INNER JOIN "question" q ON q."presentationID" = s."presentationID" 
+        INNER JOIN "participant" pa ON pa."sessionID" = s."sessionID" 
+        INNER JOIN "response" r ON r."sessionID" = s."sessionID" and r."userID" = pa."userID" 
+        group by s."sessionID", pa."userID")
+
+        SELECT "allsessions".*, to_char(s."createdAt", 'DD/MM/YYYY'), p."title" FROM (
+        SELECT COALESCE(s1."sessionID", s2."sessionID", s3."sessionID", s4."sessionID", s5."sessionID") "sessionID", "1.0", "0.8", "0.6", "0.4", "0.0" FROM 
+        (SELECT "sessionID", count("userID") AS "1.0" FROM sesh WHERE "percent" >= 1.0 GROUP BY "sessionID" ORDER BY "sessionID") s1 FULL OUTER JOIN 
+        (SELECT "sessionID", count("userID") AS "0.8" FROM sesh WHERE "percent" >= 0.8 GROUP BY "sessionID" ORDER BY "sessionID") s2 ON s1."sessionID" = s2."sessionID" FULL OUTER JOIN 
+        (SELECT "sessionID", count("userID") AS "0.6" FROM sesh WHERE "percent" >= 0.6 GROUP BY "sessionID" ORDER BY "sessionID") s3 ON coalesce(s1."sessionID", s2."sessionID") = s3."sessionID" FULL OUTER JOIN 
+        (SELECT "sessionID", count("userID") AS "0.4" FROM sesh WHERE "percent" >= 0.4 GROUP BY "sessionID" ORDER BY "sessionID") s4 ON coalesce(s1."sessionID", s2."sessionID", s3."sessionID") = s4."sessionID" FULL OUTER JOIN 
+        (SELECT "sessionID", count("userID") AS "0.0" FROM sesh WHERE "percent" >= 0.0 GROUP BY "sessionID" ORDER BY "sessionID") s5 ON coalesce(s1."sessionID", s2."sessionID", s3."sessionID", s4."sessionID") = s5."sessionID") "allsessions"
+        INNER JOIN "session" s ON s."sessionID" = "allsessions"."sessionID"
+        INNER JOIN "presentation" p ON s."presentationID" = p."presentationID"
+        WHERE "allsessions"."sessionID" IN (SELECT "sessionID" FROM "session" s INNER JOIN "presentation" p ON s."presentationID" = p."presentationID" AND p."userID" = %s)
+        ORDER BY "allsessions"."sessionID"
+
+          """, [userID])
+    columns = ('sessionID', '1.0', '0.8', '0.6', '0.4', '0.0', 'createdAt', 'title')
+    results = []
+    for row in cur.fetchall():
+       results.append(dict(zip(columns, row)))
+    return str(json.dumps(results, indent=2))
+  except psycopg2.Error as e:
+    print e.pgerror
     return 'Server Failure', status.HTTP_400_BAD_REQUEST
 
 
